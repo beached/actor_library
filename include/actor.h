@@ -32,7 +32,7 @@
 
 namespace daw {
 	struct actor_dispatch_t {
-		virtual ~dispatch_tag_base_t( ) = 0;
+		virtual ~actor_dispatch_t( ) = 0;
 		virtual std::string get_type_name( ) const = 0;
 		virtual void receive_message( boost::any ) = 0;
 	};
