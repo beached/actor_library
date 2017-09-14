@@ -24,11 +24,14 @@
 
 #include <boost/any.hpp>
 #include <functional>
-#include <map>
 #include <string>
+#include <typeindex>
+#include <unordered_map>
 
 #include <daw/daw_exception.h>
 #include <daw/fs/message_queue.h>
+
+#include "helper.h"
 
 namespace daw {
 	struct actor_dispatch_t {
@@ -38,41 +41,60 @@ namespace daw {
 	};
 
 	struct director_t {
-		using director_cb_t = std::function<void(boost::any)>;
+		using director_cb_t = std::function<void( boost::any )>;
 		std::map<size_t, director_cb_t> m_actors;
-		std::map<std::string, size_t> m_actor_map;	
+		std::map<std::string, size_t> m_actor_map;
 	};
 
-	struct invalid_message_type: std::runtime_error { };
+	struct invalid_message_type : std::runtime_error {};
 
-	bool any_true( std::initializer_list<bool> tests ) {
-		for( bool test: tests ) {
-			if( test ) {
-				return true;
-			}
+	template<typename DispatchTag>
+	class actor_t : public actor_dispatch_t {
+		using receiver_function_t = std::function<void( boost::any )>;
+		std::unordered_map<std::type_index, receiver_function_t> m_receivers;
+
+	  protected:
+		struct any_message_tag {};
+		template<typename T>
+		void add_receiver( std::function<void( T )> receiver_func ) {
+			m_receivers.insert( std::make_pair(
+			    std::type_index{typeid( T )}, [receiver_func = std::move( receiver_func )]( boost::any msg ) {
+				    receiver_func( boost::any_cast<T>( msg ) );
+			    } ) );
 		}
-		return false;
-	}
 
-	template<typename Acceptor, typename DispatchTag, typename... Accepts>
-	class actor_t: public actor_dispatch_t {
-		Acceptor m_acceptor;
+		void add_receiver( std::function<void( boost::any )> receiver_func ) {
+			m_receivers.insert(
+			    std::make_pair( std::type_index{typeid( any_message_tag )}, std::move( receiver_func ) ) );
+		}
+
 	  public:
-		actor_t( Acceptor acceptor ) : m_acceptor{std::move( acceptor )} {}
+		actor_t( ) = default;
 		virtual ~actor_t( ) = default;
 		virtual std::string get_type_name( ) const = 0;
 		actor_t( actor_t const & ) = default;
 		actor_t( actor_t && ) noexcept = default;
-		actor_t & operator=( actor_t const & ) = default;
-		actor_t & operator=( actor_t && ) noexcept = default;
+		actor_t &operator=( actor_t const & ) = default;
+		actor_t &operator=( actor_t && ) noexcept = default;
 
-		void receive_message( boost::any message ) {
-			daw::exception::daw_throw_on_false<invalid_message_type>(
-			    any_true( {message.type( ) == typeid( Accepts )...} ), "Message is not of a valid type" );
-
-			m_acceptor( std::move( message ) );
+		void receive_message( boost::any const &msg ) {
+			auto it = m_receivers.find( std::type_index{msg.type( )} );
+			if( it == m_receivers.cend( ) ) {
+				it = m_receivers.find( std::type_index{typeid( any_message_tag )} );
+				if( it != m_receivers.cend( ) ) {
+					it->second( msg );
+				} else {
+					// Invalid message type
+				}
+				return;
+			}
+			try {
+				it->second( msg );
+			} catch( ... ) {
+				// TODO: add error handling for exception in receiver
+				return;
+			}
 		}
 	};
-
 } // namespace daw
 

@@ -66,10 +66,12 @@ link_directories( ${Boost_LIBRARY_DIRS} )
 
 set( HEADER_FILES
 	${HEADER_FOLDER}/actor.h
+	${HEADER_FOLDER}/helper.h
 )
 
 set( SOURCE_FILES
 	${SOURCE_FOLDER}/actor.cpp
+	${SOURCE_FOLDER}/helper.cpp
 )
 
 add_library( actor_lib ${HEADER_FILES} ${SOURCE_FILES} )
